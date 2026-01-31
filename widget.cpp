@@ -13,7 +13,9 @@
 #include <QTime>
 #include <QDebug>
 #include <QRandomGenerator>
-#include <QDebug>
+#include <QSettings>
+#include <QFile>
+#include <QFileInfo>
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent)
@@ -23,6 +25,7 @@ Widget::Widget(QWidget *parent)
     , currentIndex(-1)
     , previousIndex(-1)
     , isRandomPlay(false)
+    , lastOpenDir(QDir::homePath())
 {
     ui->setupUi(this);
     
@@ -60,10 +63,16 @@ Widget::Widget(QWidget *parent)
             playNext();
         }
     });
+    
+    // 加载配置文件
+    loadSettings();
 }
 
 Widget::~Widget()
 {
+    // 保存配置文件
+    saveSettings();
+    
     delete ui;
 }
 
@@ -72,7 +81,7 @@ void Widget::on_pushButton_clicked()
     QStringList fileNames = QFileDialog::getOpenFileNames(
         this,                    // 父窗口
         tr("选择音频文件"),        // 对话框标题
-        QDir::homePath(),        // 初始目录
+        lastOpenDir,             // 初始目录
         tr("音频文件 (*.mp3 *.wav *.ogg *.flac);;所有文件 (*.*)"));  // 文件过滤器
 
     if (!fileNames.isEmpty()) {
@@ -116,6 +125,10 @@ void Widget::on_pushButton_clicked()
         if (!playlist.isEmpty()) {
             // 获取用户选择的第一个文件的完整路径
             QString firstSelectedFile = fileNames.first();
+            
+            // 更新上次打开的目录路径
+            QFileInfo fileInfo(firstSelectedFile);
+            lastOpenDir = fileInfo.absolutePath();
             
             // 查找该文件在播放列表中的索引
             int playIndex = playlist.indexOf(firstSelectedFile);
@@ -266,4 +279,120 @@ void Widget::playPrevious()
     }
     
     playAt(prevIndex);
+}
+
+
+void Widget::saveSettings()
+{
+    QSettings settings("AudioP.ini", QSettings::IniFormat);
+    
+    // 保存当前播放的歌曲路径
+    if (currentIndex >= 0 && currentIndex < playlist.size()) {
+        settings.setValue("CurrentSong", playlist[currentIndex]);
+    } else {
+        settings.setValue("CurrentSong", "");
+    }
+    
+    // 保存播放进度（毫秒）
+    settings.setValue("Position", player->position());
+    
+    // 保存音量大小（0-100）
+    settings.setValue("Volume", ui->SoundSilder->value());
+    
+    // 保存是否随机播放
+    settings.setValue("RandomPlay", isRandomPlay);
+    
+    // 保存上次打开的目录路径
+    if (currentIndex >= 0 && currentIndex < playlist.size()) {
+        QFileInfo fileInfo(playlist[currentIndex]);
+        settings.setValue("LastOpenDir", fileInfo.absolutePath());
+    }
+    
+    // 保存播放列表
+    settings.beginWriteArray("Playlist");
+    for (int i = 0; i < playlist.size(); ++i) {
+        settings.setArrayIndex(i);
+        settings.setValue("Song", playlist[i]);
+    }
+    settings.endArray();
+    
+    settings.sync();
+}
+
+
+void Widget::loadSettings()
+{
+    QSettings settings("AudioP.ini", QSettings::IniFormat);
+    
+    // 读取播放列表
+    int playlistSize = settings.beginReadArray("Playlist");
+    playlist.clear();
+    for (int i = 0; i < playlistSize; ++i) {
+        settings.setArrayIndex(i);
+        QString songPath = settings.value("Song").toString();
+        
+        // 检查文件是否存在
+        if (QFile::exists(songPath)) {
+            playlist.append(songPath);
+        } else {
+            qWarning() << "文件不存在，已跳过：" << songPath;
+        }
+    }
+    settings.endArray();
+    
+    // 读取当前播放的歌曲路径
+    QString currentSong = settings.value("CurrentSong", "").toString();
+    
+    // 读取播放进度
+    qint64 position = settings.value("Position", 0).toLongLong();
+    
+    // 读取音量大小
+    int volume = settings.value("Volume", 50).toInt();
+    
+    // 读取是否随机播放
+    isRandomPlay = settings.value("RandomPlay", false).toBool();
+    
+    // 读取上次打开的目录路径
+    QString lastDir = settings.value("LastOpenDir", QDir::homePath()).toString();
+    if (!lastDir.isEmpty()) {
+        lastOpenDir = lastDir;
+    }
+    
+    // 设置音量
+    ui->SoundSilder->setValue(volume);
+    audioOutput->setVolume(volume / 100.0);
+    ui->label_2->setText(QString("%1 %").arg(volume));
+    
+    // 设置随机播放复选框状态
+    ui->RandomPlay->setChecked(isRandomPlay);
+    
+    // 如果有播放列表且当前歌曲存在，则加载
+    if (!playlist.isEmpty() && !currentSong.isEmpty()) {
+        // 检查当前歌曲是否存在
+        if (QFile::exists(currentSong)) {
+            // 查找当前歌曲在播放列表中的索引
+            currentIndex = playlist.indexOf(currentSong);
+            
+            if (currentIndex != -1) {
+                // 设置播放源
+                player->setSource(QUrl::fromLocalFile(currentSong));
+                
+                // 更新显示信息
+                QFileInfo fileInfo(currentSong);
+                ui->label_5->setText(fileInfo.fileName());
+                QString parentPath = fileInfo.absolutePath();
+                QDir dir(parentPath);
+                ui->label_6->setText(dir.dirName());
+                
+                // 设置播放位置
+                player->setPosition(position);
+                
+                // 不自动播放，等待用户点击播放按钮
+                previousIndex = -1;
+            }
+        } else {
+            qWarning() << "当前歌曲文件不存在：" << currentSong;
+            currentIndex = -1;
+        }
+    }
 }

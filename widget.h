@@ -93,6 +93,16 @@ private slots:
      * 播放上一首
      */
     void playPrevious();
+    
+    /**
+     * 保存播放器状态到配置文件
+     */
+    void saveSettings();
+    
+    /**
+     * 从配置文件加载播放器状态
+     */
+    void loadSettings();
 
 private:
     Ui::Widget *ui;              // UI界面指针
@@ -102,5 +112,6 @@ private:
     int currentIndex;             // 当前播放索引
     int previousIndex;            // 上一首播放索引
     bool isRandomPlay;           // 是否随机播放
+    QString lastOpenDir;          // 上次打开的目录路径
 };
 #endif // WIDGET_H
