@@ -4,4 +4,4 @@
 极简 极轻量化 极速
 
 EXE下载：
-https://raw.githubusercontent.com/WeNing-cn/AudioPlayerWithQTCpp/refs/heads/main/build/SongPlayer.exe
+https://github.com/WeNing-cn/AudioPlayerWithQTCpp/raw/refs/heads/main/build/AudioPlayer.exe
